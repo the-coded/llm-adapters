@@ -1,0 +1,28 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    // `DOM` is what supplies `fetch`, `Response`, `TextDecoder`,
+    // `ReadableStreamDefaultReader` and `AbortSignal` to the type layer without
+    // pulling in `undici-types`. The adapters use them as ambient globals, the
+    // way both Node 22+ and Bun provide them.
+    "lib": ["ES2023", "DOM"],
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    // `bun-types` used to be what supplied `process`, `Buffer` and
+    // `NodeJS.ProcessEnv`. It is the real Bun tie in the type layer, and this
+    // is where it is cut.
+    "types": ["node"],
+    "rootDir": "src",
+    "outDir": "dist",
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noUnusedLocals": true,
+    "verbatimModuleSyntax": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true
+  },
+  "include": ["src"]
+}

@@ -1,0 +1,25 @@
+node_modules/
+dist/
+
+# Harness state, not project state: `.claude/scheduled_tasks.lock` carries a
+# session id and a pid belonging to whoever is running the tooling, which is
+# nobody else's business and changes on every run.
+.claude/
+
+# **Never in a VERSIONED file** — which is what survives of the older rule that
+# said keys live in the environment and never in a file at all. The config
+# helper revoked that half deliberately: a key may live in `~/.llm-adapters/config.json`, mode 0600,
+# under five conditions, because `$HOME` is not a repository and an environment
+# variable is readable by every process of the same user anyway.
+#
+# The two are different things and the older comment here treated them as one. A
+# key outside the repository is an explicit decision; a key inside it is still
+# forbidden, and this is the half that makes it impossible rather than merely
+# caught. `src/no-secrets.test.ts` fails the build if a key-shaped value reaches
+# a versioned file; these lines stop it becoming committable in the first place,
+# and a guard that catches a committed key is already too late.
+#
+# `.npmrc` specifically: this package publishes to npm, and a registry auth
+# token there is the standard way that credential leaks.
+.env*
+.npmrc

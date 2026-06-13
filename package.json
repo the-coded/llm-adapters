@@ -1,0 +1,65 @@
+{
+  "name": "@the-coded/llm-adapters",
+  "version": "0.1.0",
+  "description": "One interface for every way an application talks to an LLM: API keys and local CLIs alike.",
+  "license": "MIT",
+  "author": "Gabriel Mule <gabriel@laplanta.com.br>",
+  "homepage": "https://github.com/the-coded/llm-adapters#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/the-coded/llm-adapters.git"
+  },
+  "bugs": {
+    "url": "https://github.com/the-coded/llm-adapters/issues"
+  },
+  "keywords": [
+    "llm",
+    "anthropic",
+    "claude",
+    "claude-code",
+    "opencode",
+    "openai",
+    "openrouter",
+    "adapter",
+    "streaming",
+    "byok",
+    "cli",
+    "token-usage"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "types": "./dist/index.d.ts",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=22"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "CHANGELOG.md",
+    "!dist/**/*.map",
+    "!dist/**/*.test.js",
+    "!dist/**/*.test.d.ts",
+    "!dist/fixtures"
+  ],
+  "scripts": {
+    "build": "tsc && node -e \"require('node:fs').cpSync('src/fixtures','dist/fixtures',{recursive:true})\"",
+    "typecheck": "tsc --noEmit",
+    "typecheck:examples": "npm run build && tsc --noEmit -p tsconfig.examples.json",
+    "test": "npm run build && node --test \"dist/**/*.test.js\"",
+    "test:bun": "bun run build && bun test dist",
+    "verify:pack": "npm run build && node scripts/verify-pack.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0"
+  }
+}
