@@ -1,0 +1,12 @@
+{
+  // `examples/` and `demo/` live outside `src/`, so the main config does not see
+  // them -- and a harness nobody type-checks rots quietly, which is worse for a
+  // harness than for most code, because it is what somebody runs on their first
+  // day. Checked here, emitted nowhere.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": "."
+  },
+  "include": ["examples"]
+}

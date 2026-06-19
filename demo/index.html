@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="en" class="h-full">
+<meta charset="utf-8" />
+<title>llm-adapters — demo</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>tailwind.config = { darkMode: "media" };</script>
+
+<body class="h-full bg-slate-50 text-slate-800 dark:bg-slate-950 dark:text-slate-200">
+<div class="mx-auto max-w-6xl p-6">
+
+  <header class="mb-6">
+    <h1 class="text-2xl font-bold tracking-tight">llm-adapters</h1>
+    <p class="text-sm text-slate-500 dark:text-slate-400">
+      One contract, four providers. Two speak HTTP; two are local processes this library spawns.
+    </p>
+  </header>
+
+  <div class="grid gap-6 lg:grid-cols-[22rem_1fr]">
+
+    <!-- Configuration. Everything is set here: a demo whose precondition is
+         editing JSON in your home directory is not a demo. -->
+    <section class="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+      <h2 class="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">Provider</h2>
+
+      <div id="providers" class="mb-4 grid grid-cols-2 gap-2"></div>
+
+      <div id="fields" class="space-y-3"></div>
+      <datalist id="models"></datalist>
+
+      <p id="modelSource" class="mt-2 text-xs text-slate-500 dark:text-slate-400"></p>
+
+      <div class="mt-4 flex flex-wrap gap-2">
+        <button id="load" class="rounded-md border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800">
+          Load from ~/.llm-adapters
+        </button>
+        <button id="save" class="rounded-md border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800">
+          Save
+        </button>
+      </div>
+      <label class="mt-2 flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+        <input type="checkbox" id="includeApiKey" class="rounded" />
+        also write the API key to that file
+      </label>
+      <p id="configNote" class="mt-2 text-xs"></p>
+
+      <p class="mt-4 border-t border-slate-200 pt-3 text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
+        Nothing is written unless you click Save. Until then the key lives in this
+        server's memory for this session only — never in browser storage, never in a log.
+      </p>
+    </section>
+
+    <!-- Conversation and result. -->
+    <section class="space-y-4">
+      <form id="ask" class="flex gap-2">
+        <input id="prompt" value="Name three prime numbers."
+               class="flex-1 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900" />
+        <button id="send" class="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-40 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white">
+          Send
+        </button>
+        <button id="cancel" type="button"
+                class="hidden rounded-md border border-slate-300 px-4 py-2 text-sm hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800">
+          Cancel
+        </button>
+      </form>
+
+      <!-- Two states, not one. Waiting for the first token is the CLI being
+           resolved and spawned -- measured at nearly twelve seconds for
+           `claude-code` against three for a gateway -- and receiving is the
+           answer arriving. Collapsing them would hide the one thing this demo
+           can teach about why one provider feels slow. -->
+      <p id="status" class="hidden items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+        <span class="h-3 w-3 animate-spin rounded-full border-2 border-slate-400 border-t-transparent"></span>
+        <span id="statusText"></span>
+      </p>
+
+      <div id="out" class="min-h-[8rem] whitespace-pre-wrap rounded-xl border border-slate-200 bg-white p-4 text-sm dark:border-slate-800 dark:bg-slate-900"></div>
+
+      <div id="usagePanel" class="hidden rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+        <h2 class="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">Usage</h2>
+        <dl id="usage" class="grid grid-cols-[10rem_1fr] gap-x-4 gap-y-1 text-sm"></dl>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script type="module">
+  const $ = (id) => document.getElementById(id);
+  const api = (path, payload) =>
+    fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) }).then((r) => r.json());
+
+  // One colour per provider, from the logo, so the screen and the image tell
+  // the same story.
+  const COLOURS = {
+    "claude-code": "bg-emerald-500",
+    opencode: "bg-orange-500",
+    anthropic: "bg-pink-500",
+    "openai-compatible": "bg-blue-500",
+  };
+  const LABELS = { apiKey: "API key", baseUrl: "Base URL", model: "Model", claudeCodePath: "claude binary path", opencodePath: "opencode binary path" };
+
+  const { session } = await api("/session", {});
+  const providers = await (await fetch("/providers")).json();
+  let current = providers[0];
+
+  for (const p of providers) {
+    const button = document.createElement("button");
+    button.className = "flex items-center gap-2 rounded-md border px-2 py-2 text-left text-xs border-slate-300 dark:border-slate-700";
+    button.innerHTML = `<span class="h-2.5 w-2.5 shrink-0 rounded-full ${COLOURS[p.id] ?? "bg-slate-400"}"></span><span class="truncate">${p.label}</span>`;
+    button.onclick = () => select(p);
+    button.dataset.id = p.id;
+    $("providers").append(button);
+  }
+
+  function renderFields() {
+    $("fields").replaceChildren();
+    for (const field of current.fields) {
+      const wrap = document.createElement("label");
+      wrap.className = "block";
+      const optional = field.endsWith("Path") ? " (optional)" : "";
+      wrap.innerHTML = `
+        <span class="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">${LABELS[field] ?? field}${optional}</span>
+        <input data-field="${field}" ${field === "apiKey" ? 'type="password"' : ""} ${field === "model" ? 'list="models"' : ""}
+               placeholder="${field === "model" ? current.defaultModel : ""}"
+               class="w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-950" />`;
+      $("fields").append(wrap);
+    }
+    for (const input of $("fields").querySelectorAll("input")) input.oninput = push;
+  }
+
+  const fieldValues = () =>
+    Object.fromEntries([...$("fields").querySelectorAll("input")].map((i) => [i.dataset.field, i.value]));
+
+  const push = () => api("/configure", { session, provider: current.id, fields: fieldValues() });
+
+  async function refreshModels() {
+    const res = await (await fetch(`/models?session=${session}&provider=${current.id}`)).json();
+    $("models").replaceChildren(...res.models.map((m) => Object.assign(document.createElement("option"), { value: m })));
+    // Feature detection made visible: a present `listModels` means a live
+    // answer, its absence means the catalogue. Either way the field stays free
+    // text — a suggestion, never a limit.
+    $("modelSource").textContent = res.live
+      ? "Models listed by the provider itself. The field is free text; this is a suggestion."
+      : "This provider cannot be asked for a model list, so these come from the static catalogue.";
+  }
+
+  async function select(provider) {
+    current = provider;
+    for (const button of $("providers").children) {
+      button.classList.toggle("ring-2", button.dataset.id === provider.id);
+      button.classList.toggle("ring-slate-900", button.dataset.id === provider.id);
+      button.classList.toggle("dark:ring-slate-100", button.dataset.id === provider.id);
+    }
+    renderFields();
+    $("configNote").textContent = "";
+    await push();
+    await refreshModels();
+  }
+
+  $("load").onclick = async () => {
+    const res = await api("/config/load", { session, provider: current.id });
+    if (!res.found) {
+      $("configNote").className = "mt-2 text-xs text-slate-500";
+      $("configNote").textContent = `Nothing saved for ${current.label} yet.`;
+      return;
+    }
+    for (const input of $("fields").querySelectorAll("input")) {
+      const value = res.fields[input.dataset.field];
+      if (value) {
+        input.value = value;
+        // A saved key comes back masked, as evidence that it exists. The real
+        // value stays on the server and is sent back untouched when you run.
+        if (input.dataset.field === "apiKey") input.type = "text";
+      }
+    }
+    $("configNote").className = "mt-2 text-xs text-emerald-600 dark:text-emerald-400";
+    $("configNote").textContent = res.hasApiKey ? "Loaded. The key is shown masked and never leaves the server." : "Loaded.";
+    await refreshModels();
+  };
+
+  $("save").onclick = async () => {
+    await push();
+    const res = await api("/config/save", { session, provider: current.id, includeApiKey: $("includeApiKey").checked });
+    $("configNote").className = "mt-2 text-xs text-emerald-600 dark:text-emerald-400";
+    $("configNote").textContent =
+      `Saved to ${res.path}, mode ${res.mode}${res.wroteKey ? ", key included" : ", without the key"}. ` +
+      `A looser mode is refused on read, so keep it at ${res.mode} if you copy it elsewhere.`;
+  };
+
+  const field = (label, value, tone = "") => {
+    $("usage").append(Object.assign(document.createElement("dt"), { textContent: label, className: "text-slate-500" }));
+    $("usage").append(Object.assign(document.createElement("dd"), { textContent: value, className: tone }));
+  };
+
+  // The rule the whole package protects, at the one place a pretty screen is
+  // tempted to break it: a provider that did not say what something cost must
+  // never read as zero, and must not be quietly omitted either.
+  const reported = (value) => (value === null || value === undefined ? "not reported by the provider" : String(value));
+
+  let inFlight = null;
+
+  /** Idle, waiting, or receiving. The button is only ever re-enabled here, so
+   *  there is no path that leaves it disabled forever — which is what a failure
+   *  used to do, leaving a page reload as the only way out. */
+  function setState(state) {
+    const busy = state !== "idle";
+    $("send").disabled = busy;
+    // Tailwind's `hidden` class, never the `hidden` ATTRIBUTE. The attribute is
+    // hidden by the browser's own stylesheet, and any author `display` rule
+    // beats a UA rule — so `<p hidden class="flex">` renders, and the spinner
+    // sat there permanently. One mechanism everywhere; the `flex` this element
+    // needs while visible is added alongside rather than baked into the markup.
+    $("cancel").classList.toggle("hidden", !busy);
+    $("status").classList.toggle("hidden", !busy);
+    $("status").classList.toggle("flex", busy);
+    if (state === "waiting") $("statusText").textContent = `waiting for the first token from ${current.label}…`;
+    if (state === "streaming") $("statusText").textContent = "receiving";
+  }
+
+  function finish() {
+    inFlight?.close();
+    inFlight = null;
+    setState("idle");
+  }
+
+  $("cancel").onclick = () => {
+    // Closing the EventSource drops the HTTP connection, which the server sees
+    // as a client disconnect and turns into an `AbortSignal` — the same path a
+    // real client hanging up takes, ending in the spawned process being killed.
+    finish();
+    $("statusText").textContent = "";
+    $("out").textContent += "\n\n[cancelled]";
+  };
+
+  $("ask").onsubmit = async (event) => {
+    event.preventDefault();
+    if (inFlight) return;
+    await push();
+    $("out").textContent = "";
+    $("out").className = $("out").className.replace(" text-rose-600", "");
+    $("usage").replaceChildren();
+    $("usagePanel").classList.add("hidden");
+    setState("waiting");
+
+    const query = new URLSearchParams({ session, provider: current.id, prompt: $("prompt").value });
+    const source = new EventSource(`/stream?${query}`);
+    inFlight = source;
+
+    source.addEventListener("text", (e) => {
+      // The first chunk is what turns "waiting" into "receiving".
+      if (!$("out").textContent) setState("streaming");
+      $("out").textContent += JSON.parse(e.data).text;
+    });
+    source.addEventListener("failed", (e) => {
+      const { message, details } = JSON.parse(e.data);
+      $("out").className += " text-rose-600";
+      $("out").textContent = details ? `${message}\n\n${details}` : message;
+      finish();
+    });
+    source.onerror = () => {
+      // A dropped connection while still in flight is a failure, not a normal
+      // close: without this the page would sit disabled with a spinner forever.
+      if (!inFlight) return;
+      $("out").className += " text-rose-600";
+      $("out").textContent ||= "the connection to the demo server dropped";
+      finish();
+    };
+    source.addEventListener("usage", (e) => {
+      const u = JSON.parse(e.data);
+      $("usagePanel").classList.remove("hidden");
+      field("model", reported(u.model));
+      field("input tokens", reported(u.inputTokens));
+      field("output tokens", reported(u.outputTokens));
+      field("cache read", reported(u.cacheReadTokens));
+      field("cache creation", reported(u.cacheCreationTokens));
+      field(
+        "cost",
+        u.costUSD === null ? "not reported by the provider — unknown, not zero" : `$${u.costUSD} (${u.costBasis ?? "basis not stated"})`,
+        u.costUSD === null ? "text-amber-600 dark:text-amber-400" : "",
+      );
+    });
+    source.addEventListener("done", finish);
+  };
+
+  await select(providers.find((p) => p.id === "claude-code") ?? providers[0]);
+</script>
+</body>
+</html>
