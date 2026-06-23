@@ -1,0 +1,64 @@
+# Publishes to npm when a GitHub Release is published. A person publishing a
+# release is the gate; pushing a tag alone publishes nothing.
+#
+# Authentication is npm Trusted Publishing (OIDC): npm exchanges the workflow's
+# OIDC token for a short-lived publish credential, so there is no long-lived
+# NPM_TOKEN to leak, and provenance is attached automatically. It only works
+# once the package exists on npm and this file is registered as its trusted
+# publisher -- see CONTRIBUTING.md.
+
+name: Publish
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+# Two releases published close together must not race each other to the
+# registry. Queued, not cancelled: a cancelled publish is a release that never
+# happened.
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    # Required reviewers can be added to this environment later without editing
+    # the workflow. The name must match the trusted-publisher entry, if one is
+    # set there.
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      # Trusted Publishing needs npm >= 11.5.1. Asserted rather than assumed:
+      # the runner's bundled npm is whatever shipped with that Node image.
+      - run: npm install -g npm@^11.5.1
+      - run: node -e "const [a,b,c]=process.argv[1].split('.').map(Number); if (a<11||(a===11&&(b<5||(b===5&&c<1)))) { console.error('npm '+process.argv[1]+' is older than 11.5.1'); process.exit(1) }" "$(npm -v)"
+
+      # Before any build: a wrong tag or a package still marked private fails
+      # here, with the reason, instead of after the suite.
+      - run: node scripts/check-release.mjs "$RELEASE_TAG"
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build
+      - run: npm run typecheck:examples
+      - run: node --test "dist/**/*.test.js"
+      - run: node scripts/verify-pack.mjs
+
+      # `--provenance` is what Trusted Publishing does by default; spelled out so
+      # a publish that cannot attach it (a private repository) fails instead of
+      # going out without it.
+      - run: npm publish --provenance

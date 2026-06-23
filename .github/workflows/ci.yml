@@ -1,0 +1,64 @@
+# The gate. The package's central claim is "runs on Bun and Node", and proving
+# it needs a matrix no developer machine reliably has, on every pull request,
+# with no way to skip it. A local pre-commit hook is fast feedback and can be
+# skipped with one flag, so it is comfort rather than a guarantee — and it stays
+# unwritten until it is missed.
+#
+# All three jobs build before they test: `dist/` is the published artifact, so
+# testing the source would certify something nobody installs.
+
+name: CI
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  bun:
+    name: bun
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      # `npm ci` rather than `bun install`, deliberately: one lockfile decides
+      # the toolchain version on every runtime, so a Bun-only resolution can
+      # never be the reason this job disagrees with the Node ones.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build
+      # The harness lives outside `src/`, so the main typecheck does not see it.
+      # It resolves the package by name, so it needs the build first -- the
+      # script does its own build, and the order here matches anyway.
+      - run: npm run typecheck:examples
+      - run: bun test dist
+      # The published contents, asserted. `files` uses negative patterns, which
+      # fail silently when a new artifact type appears, so this runs once in the
+      # matrix rather than in all three jobs.
+      - run: node scripts/verify-pack.mjs
+
+  node:
+    name: node ${{ matrix.node }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 22 and 24 are the live LTS lines. Node 20 reached end of life on
+        # 2026-04-30 and is deliberately not here.
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build
+      - run: npm run typecheck:examples
+      - run: node --test "dist/**/*.test.js"
