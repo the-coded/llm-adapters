@@ -59,9 +59,10 @@ racing each other to the registry.
 A pre-release never becomes `latest`: whoever runs `npm install
 @the-coded/llm-adapters` keeps getting the last stable version.
 
-1. Version it with a pre-release suffix: `x.y.z-alpha.N`, `x.y.z-beta.N` or
-   `x.y.z-rc.N` (for example `0.2.0-beta.1`), bumped and changelogged like any
-   other version.
+1. Version it with a pre-release suffix, by convention `x.y.z-alpha.N`,
+   `x.y.z-beta.N` or `x.y.z-rc.N` (for example `0.2.0-beta.1`), bumped and
+   changelogged like any other version. Any semver pre-release suffix counts
+   (the part after `-`, before any `+build` metadata), not only these three.
 2. Publish the GitHub Release with the tag `vx.y.z-beta.N` and the
    **"Set as a pre-release"** box checked.
 3. The workflow publishes it under the `next` dist-tag. Install it with
