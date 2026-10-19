@@ -107,12 +107,12 @@ staged with `npm stage publish`, npm publishes a public placeholder version,
 `0.0.0-stage` (see npm's
 [staged publishing docs](https://docs.npmjs.com/staged-publishing/)); on the
 package page its README reads "Temporary Holding Version". This package got one
-on its first publish. To remove it, with npm 11.15 or newer (`npm stage` does
-not exist before; [command reference](https://docs.npmjs.com/cli/v11/commands/npm-stage/)):
-`npm stage list @the-coded/llm-adapters` and `npm stage reject <stage-id>` for
-anything still pending, then `npm unpublish @the-coded/llm-adapters@0.0.0-stage`, ideally within 72 hours
-of the package's creation ([unpublish policy](https://docs.npmjs.com/policies/unpublish/)).
-Unpublishing one version does not block later publishes.
+on its first publish and keeps it: it is not `latest` or `next`, so nobody
+installs it by accident. Removing it would take `npm unpublish
+@the-coded/llm-adapters@0.0.0-stage`, after `npm stage list` / `npm stage reject
+<stage-id>` for anything still pending (npm 11.15 or newer;
+[command reference](https://docs.npmjs.com/cli/v11/commands/npm-stage/),
+[unpublish policy](https://docs.npmjs.com/policies/unpublish/)).
 
 ## When something goes wrong
 
