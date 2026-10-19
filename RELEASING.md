@@ -89,17 +89,18 @@ publishes for real.
 | First version published by hand (npm only allows a trusted publisher on a package that already exists) | local, logged in with 2FA | done: `0.1.0`, 2026-10-19 |
 | Trusted publisher: GitHub Actions, organisation `the-coded`, repository `llm-adapters`, workflow `publish.yml`, environment `npm`, with direct `npm publish` allowed | npmjs.com → package → Settings | done 2026-10-19; **pending validation**: npm needs one publish from the workflow before 2026-10-21 23:20 UTC |
 | GitHub environment named `npm` | GitHub → repository → Settings → Environments | done 2026-10-19 |
-| Tag `v0.1.0` on the commit that was published (`5d7edf8`) | GitHub | **to do**: a tag only, no Release (see below) |
+| Tag and GitHub Release `v0.1.0` on the commit that was published (`5d7edf8`) | GitHub | done 2026-10-19 (the publish run it triggered was cancelled; see below) |
 
 npm does not validate the trusted-publisher entry when it is saved: a mistake
 shows up as `ENEEDAUTH` on the next release. Required reviewers can be added to
 the `npm` environment at any time, without editing the workflow, if a release
 should need a second approval.
 
-**Tagging a version that is already on npm.** A tag alone publishes nothing, so
-`0.1.0` gets a tag without a Release: `git tag v0.1.0 5d7edf8 && git push origin
-v0.1.0`. Publishing a Release for it would run the workflow, which would fail at
-`npm publish` because a published version can never be reused.
+**Releasing a version that is already on npm.** Publishing a GitHub Release
+always runs the workflow, and for a version already on npm it would fail at
+`npm publish`, because a published version can never be reused. To add a
+Release after the fact (as done for `v0.1.0`), publish it and cancel the
+`publish` run it triggers: `gh run cancel <run id>`.
 
 ## When something goes wrong
 
@@ -107,6 +108,8 @@ v0.1.0`. Publishing a Release for it would run the workflow, which would fail at
 | --- | --- | --- |
 | `check-release: release tag ... does not match` | The tag and `package.json` disagree | Delete the Release and its tag, bump or retag, publish again |
 | `check-release: package.json sets "private"` | Someone added `"private"` back | Remove the field in a commit, then release again |
+| `check-release: version ... is a pre-release but the GitHub Release is not marked as one` | Suffix in the version, "Set as a pre-release" unchecked | Delete the Release and its tag, then publish it again with the box checked. Re-running the job does not help: it reuses the flag from the original event |
+| `check-release: the GitHub Release is marked as a pre-release but version ... has no pre-release suffix` | Box checked on a stable version | Delete the Release and its tag, then publish it again unchecked (or bump to a suffixed version) |
 | `ENEEDAUTH` at `npm publish` | Trusted publisher missing or mistyped | Fix the entry on npmjs.com (names are exact), re-run the job |
 | `EPUBLISHCONFLICT` / "cannot publish over" | That version already exists on npm | Bump to the next version; versions are never reused |
 | A broken version is already out | — | Publish a fix as the next patch, and mark the bad one with `npm deprecate @the-coded/llm-adapters@x.y.z "<reason>"`. Unpublishing is restricted (generally within 72 hours, and after that only under narrow conditions) and breaks anyone who installed it; prefer deprecating. |
