@@ -87,7 +87,7 @@ publishes for real.
 | --- | --- | --- |
 | `the-coded` organisation on npmjs.com, owning the `@the-coded` scope | npmjs.com | done |
 | First version published by hand (npm only allows a trusted publisher on a package that already exists) | local, logged in with 2FA | done: `0.1.0`, 2026-10-19 |
-| Trusted publisher: GitHub Actions, organisation `the-coded`, repository `llm-adapters`, workflow `publish.yml`, environment `npm`, with direct `npm publish` allowed | npmjs.com → package → Settings | done 2026-10-19; **pending validation**: npm needs one publish from the workflow before 2026-10-21 23:20 UTC |
+| Trusted publisher: GitHub Actions, organisation `the-coded`, repository `llm-adapters`, workflow `publish.yml`, environment `npm`, with direct `npm publish` allowed | npmjs.com → package → Settings | done 2026-10-19; **valid** since the first workflow publish (`0.1.1-beta.0`, 2026-10-19) |
 | GitHub environment named `npm` | GitHub → repository → Settings → Environments | done 2026-10-19 |
 | Tag and GitHub Release `v0.1.0` on the commit that was published (`5d7edf8`) | GitHub | done 2026-10-19 (the publish run it triggered was cancelled; see below) |
 
@@ -101,6 +101,16 @@ always runs the workflow, and for a version already on npm it would fail at
 `npm publish`, because a published version can never be reused. To add a
 Release after the fact (as done for `v0.1.0`), publish it and cancel the
 `publish` run it triggers: `gh run cancel <run id>`.
+
+**The `0.0.0-stage` placeholder.** When a package that does not exist yet is
+staged with `npm stage publish`, npm publishes a public placeholder version,
+`0.0.0-stage`, whose README reads "Temporary Holding Version" (see npm's
+[staged publishing docs](https://docs.npmjs.com/staged-publishing/)). This
+package got one on its first publish. To remove it: `npm stage list
+@the-coded/llm-adapters` and `npm stage reject <id>` for anything still pending,
+then `npm unpublish @the-coded/llm-adapters@0.0.0-stage`, ideally within 72 hours
+of the package's creation ([unpublish policy](https://docs.npmjs.com/policies/unpublish/)).
+Unpublishing one version does not block later publishes.
 
 ## When something goes wrong
 
