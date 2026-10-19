@@ -1,0 +1,97 @@
+# Releasing
+
+How a version of `@the-coded/llm-adapters` reaches npm. The short version:
+bump the version, merge, publish a GitHub Release tagged `vX.Y.Z`, and the
+`publish.yml` workflow does the rest.
+
+## How it works
+
+Publishing a GitHub Release runs `.github/workflows/publish.yml`. Pushing a tag
+alone publishes nothing: a person publishing the release is the gate.
+
+Before anything reaches the registry, the job:
+
+1. checks that the release tag is `v` plus the `package.json` version and that
+   `package.json` is not marked `private` (`scripts/check-release.mjs`);
+2. runs the same gates as CI: `npm ci`, typecheck of the package and the
+   examples, build, the test suite and the tarball check
+   (`scripts/verify-pack.mjs`);
+3. runs `npm publish --provenance`.
+
+It authenticates with npm Trusted Publishing: there is no `NPM_TOKEN` secret.
+npm exchanges the workflow's OIDC token for a short-lived credential and attaches
+provenance, so every version on npm links back to the commit and workflow run
+that built it. Trusted Publishing needs npm 11.5.1 or newer, which the job
+installs and asserts. Two releases published close together queue instead of
+racing each other to the registry.
+
+## Releasing a new version
+
+1. **Pick the version** by [Semantic Versioning](https://semver.org/). While the
+   package is `0.x`, a breaking change bumps the minor (`0.1.0` → `0.2.0`) and
+   everything else bumps the patch (`0.1.0` → `0.1.1`).
+2. **Bump it on a branch**, in the same commit as the changelog:
+   - `npm version <x.y.z> --no-git-tag-version`, which updates `package.json`
+     and `package-lock.json` without creating a tag;
+   - a new `## [x.y.z]` section at the top of `CHANGELOG.md`, in
+     [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format
+     (Added, Changed, Fixed, Removed).
+   - Commit as `chore(release): x.y.z`.
+3. **Check locally** before opening the pull request:
+
+   ```sh
+   npm ci
+   npm run typecheck
+   npm test
+   npm run verify:pack
+   ```
+
+4. **Merge the pull request** into `main` once CI is green.
+5. **Publish the GitHub Release** from `main`: tag `vX.Y.Z` (it must match
+   `package.json`), title `vX.Y.Z`, and the changelog section as the notes.
+6. **Watch the run** under Actions → `publish`. When it is green, check the
+   version on npm: `npm view @the-coded/llm-adapters version`. The registry can
+   take a few minutes to show a new version.
+
+## One-time setup
+
+| Step | Where | Status |
+| --- | --- | --- |
+| `the-coded` organisation on npmjs.com, owning the `@the-coded` scope | npmjs.com | done |
+| First version published by hand (npm only allows a trusted publisher on a package that already exists) | local, logged in with 2FA | done: `0.1.0`, 2026-10-19 |
+| Trusted publisher: GitHub Actions, organisation `the-coded`, repository `llm-adapters`, workflow `publish.yml`, environment `npm` | npmjs.com → package → Settings | **to do** |
+| GitHub environment named `npm` | GitHub → repository → Settings → Environments | **to do** |
+| Tag `v0.1.0` on the commit that was published (`5d7edf8`) | GitHub | **to do**: a tag only, no Release (see below) |
+
+npm does not validate the trusted-publisher entry when it is saved: a mistake
+shows up as `ENEEDAUTH` on the next release. Required reviewers can be added to
+the `npm` environment at any time, without editing the workflow, if a release
+should need a second approval.
+
+**Tagging a version that is already on npm.** A tag alone publishes nothing, so
+`0.1.0` gets a tag without a Release: `git tag v0.1.0 5d7edf8 && git push origin
+v0.1.0`. Publishing a Release for it would run the workflow, which would fail at
+`npm publish` because a published version can never be reused.
+
+## When something goes wrong
+
+| Symptom | Cause | Fix |
+| --- | --- | --- |
+| `check-release: release tag ... does not match` | The tag and `package.json` disagree | Delete the Release and its tag, bump or retag, publish again |
+| `ENEEDAUTH` at `npm publish` | Trusted publisher missing or mistyped | Fix the entry on npmjs.com (names are exact), re-run the job |
+| `EPUBLISHCONFLICT` / "cannot publish over" | That version already exists on npm | Bump to the next version; versions are never reused |
+| A broken version is already out | — | Publish a fix as the next patch, and mark the bad one with `npm deprecate @the-coded/llm-adapters@x.y.z "<reason>"`. Unpublishing is only allowed within 72 hours and breaks anyone who installed it; prefer deprecating. |
+
+## Publishing by hand
+
+Only for the first version, or if the workflow is unavailable. From a clean
+checkout of the release commit, logged in to npm with 2FA:
+
+```sh
+npm ci && npm run typecheck && npm test && npm run verify:pack
+npm publish
+```
+
+`npm publish` does not build: `npm test` and `npm run verify:pack` leave a fresh
+`dist/`, which is what gets packed. A version published by hand carries no
+provenance.

@@ -66,42 +66,9 @@ files, that `dist/` is non-empty — belongs in the test that depends on it.
 
 ## Publishing
 
-The package goes to the public npm registry, under the `@the-coded` scope owned
-by the `the-coded` organisation on npmjs.com. `publishConfig.access` is `public`
-because a scoped package is restricted by default, and a first publish without
-it fails. Nothing in the repository blocks a publish: a plain `npm publish` from
-a clean checkout publishes for real.
-
-### The release flow
-
-Publishing a GitHub Release runs `.github/workflows/publish.yml`. Before it
-publishes, the job checks that the release tag is `v` plus the `package.json`
-version and that `package.json` is not marked `private`
-(`scripts/check-release.mjs`), then
-runs the same gates as CI: install, typecheck of the package and the examples,
-build, the suite and the tarball check. Pushing a tag alone publishes nothing.
-
-The job authenticates with npm Trusted Publishing: no `NPM_TOKEN` secret exists,
-npm exchanges the workflow's OIDC token for a short-lived credential, and
-provenance is attached to every version. It needs npm 11.5.1 or newer, which the
-job installs and asserts.
-
-### One-time setup, outside the repository
-
-- The `the-coded` organisation on npmjs.com, which owns the `@the-coded` scope.
-- **The first version is published by hand.** npm only lets a trusted publisher
-  be configured on a package that already exists, so the workflow cannot publish
-  version one: run `npm publish` from a clean checkout of the release commit,
-  logged in to npm with 2FA.
-- Then, in the package's settings on npmjs.com, add a trusted publisher: GitHub
-  Actions, organisation `the-coded`, repository `llm-adapters`, workflow
-  `publish.yml`, environment `npm`, with direct `npm publish` allowed. npm does
-  not validate this entry when it is saved; a mistake surfaces as `ENEEDAUTH` on
-  the next release.
-- A GitHub environment named `npm` in the repository settings. Required
-  reviewers can be added to it at any time without editing the workflow.
-
-Every later version goes out through a GitHub Release.
+Releases go to npm through a GitHub Release and the `publish.yml` workflow, with
+npm Trusted Publishing. The full process, the one-time setup and what to do when
+a release fails are in [RELEASING.md](RELEASING.md).
 
 ## Commits and licence
 
