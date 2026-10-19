@@ -87,8 +87,8 @@ publishes for real.
 | --- | --- | --- |
 | `the-coded` organisation on npmjs.com, owning the `@the-coded` scope | npmjs.com | done |
 | First version published by hand (npm only allows a trusted publisher on a package that already exists) | local, logged in with 2FA | done: `0.1.0`, 2026-10-19 |
-| Trusted publisher: GitHub Actions, organisation `the-coded`, repository `llm-adapters`, workflow `publish.yml`, environment `npm`, with direct `npm publish` allowed | npmjs.com → package → Settings | **to do** |
-| GitHub environment named `npm` | GitHub → repository → Settings → Environments | **to do** |
+| Trusted publisher: GitHub Actions, organisation `the-coded`, repository `llm-adapters`, workflow `publish.yml`, environment `npm`, with direct `npm publish` allowed | npmjs.com → package → Settings | done 2026-10-19; **pending validation**: npm needs one publish from the workflow before 2026-10-21 23:20 UTC |
+| GitHub environment named `npm` | GitHub → repository → Settings → Environments | done 2026-10-19 |
 | Tag `v0.1.0` on the commit that was published (`5d7edf8`) | GitHub | **to do**: a tag only, no Release (see below) |
 
 npm does not validate the trusted-publisher entry when it is saved: a mistake
