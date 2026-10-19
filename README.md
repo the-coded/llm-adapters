@@ -1,19 +1,18 @@
 <div align="center">
 <!-- Absolute on purpose. `assets/` is not in the tarball, so a relative path
      renders as a broken image on the npm page; this URL shows the logo there
-     too, but only once the repository exists on GitHub. -->
-<img src="https://raw.githubusercontent.com/the-coded/llm-adapters/main/assets/llm-adapters-logo-small.png" alt="llm-adapters" width="40%" />
+     too. -->
+<img src="https://raw.githubusercontent.com/the-coded/llm-adapters/main/assets/llm-adapters-emblem.jpg" alt="llm-adapters — one interface to rule them all" width="40%" />
 
 # @the-coded/llm-adapters
 
-**One interface for every way an application talks to an LLM —
-API keys and local CLIs alike.**
+**One interface to rule them all.**
 
-<!-- The CI badge stays commented until the repository exists on GitHub.
-     A badge pointing at a repository nobody created renders broken, and a
-     broken build badge is read as a failing build.
+Every way an application talks to an LLM — API keys and local CLIs alike —
+behind a single TypeScript contract.
+
+[![npm](https://img.shields.io/npm/v/@the-coded/llm-adapters.svg)](https://www.npmjs.com/package/@the-coded/llm-adapters)
 [![CI](https://github.com/the-coded/llm-adapters/actions/workflows/ci.yml/badge.svg)](https://github.com/the-coded/llm-adapters/actions/workflows/ci.yml)
--->
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 [![Node](https://img.shields.io/badge/node-%E2%89%A522-brightgreen.svg)](#runtimes)
 [![Bun](https://img.shields.io/badge/bun-supported-black.svg)](#runtimes)
@@ -30,7 +29,7 @@ Those have almost nothing in common, so applications grow two code paths and a
 branch at every call site. `@the-coded/llm-adapters` collapses them into one
 `LLMAdapter` contract: the same calls whether the tokens come from
 Anthropic's API, any OpenAI-protocol gateway, the `claude` CLI, or an
-`opencode` server. Swapping providers is a configuration change.
+`opencode` server. Swapping providers is a configuration change — one contract to bind them all.
 
 ## Features
 
@@ -100,6 +99,13 @@ const answer = await anthropic.complete("Be terse.", [
 ```
 
 ## Providers
+
+<div align="center">
+<!-- Absolute for the same reason as the logo: assets/ is not in the tarball. -->
+<img src="https://raw.githubusercontent.com/the-coded/llm-adapters/main/assets/llm-adapters-fellowship.jpg" alt="The fellowship: two cloud APIs and two local CLIs, all bound by one interface" width="70%" />
+
+*The fellowship: two cloud APIs and two local CLIs, each with its own road, all bound by one interface.*
+</div>
 
 | Provider | Transport | Auth | Model discovery | Status |
 |---|---|---|---|---|
