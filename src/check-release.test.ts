@@ -11,12 +11,13 @@ import { REPO_ROOT } from "./repo-scan.test.js";
  *  run here against a manifest of each shape, from a copy placed beside it --
  *  the script reads `../package.json` relative to itself, and giving it a
  *  path argument only for tests would be a second way in. */
-function run(manifest: string | null, tag: string): { code: number | null; out: string } {
+function run(manifest: string | null, tag: string, prerelease: string | null = "false"): { code: number | null; out: string } {
   const dir = mkdtempSync(join(tmpdir(), "llm-adapters-release-"));
   mkdirSync(join(dir, "scripts"));
   copyFileSync(join(REPO_ROOT, "scripts/check-release.mjs"), join(dir, "scripts/check-release.mjs"));
   if (manifest !== null) writeFileSync(join(dir, "package.json"), manifest);
-  const res = spawnSync(process.execPath, [join(dir, "scripts/check-release.mjs"), tag], { encoding: "utf8" });
+  const args = [join(dir, "scripts/check-release.mjs"), tag, ...(prerelease === null ? [] : [prerelease])];
+  const res = spawnSync(process.execPath, args, { encoding: "utf8" });
   return { code: res.status, out: res.stdout + res.stderr };
 }
 
@@ -68,4 +69,37 @@ test("a missing version is named, not compared as `vundefined`", () => {
   const res = run(JSON.stringify({ name: "x" }), "vundefined");
   assertRefused(res, /has no version/);
   assert.ok(!res.out.includes("vundefined does not"), res.out);
+});
+
+// The Release's "pre-release" flag picks the dist-tag, so it has to agree with
+// the version: the four combinations of suffix and flag.
+test("a plain version on a Release not marked as pre-release is allowed", () => {
+  const res = run(manifest({}), "v1.2.3", "false");
+  assert.equal(res.code, 0, res.out);
+  assert.match(res.out, /\(stable\), and publishing is allowed/);
+});
+
+test("a suffixed version on a Release marked as pre-release is allowed", () => {
+  const res = run(manifest({ version: "1.2.3-beta.1" }), "v1.2.3-beta.1", "true");
+  assert.equal(res.code, 0, res.out);
+  assert.match(res.out, /\(pre-release\), and publishing is allowed/);
+});
+
+test("a suffixed version on a Release not marked as pre-release is refused", () => {
+  assertRefused(run(manifest({ version: "1.2.3-rc.1" }), "v1.2.3-rc.1", "false"), /is a pre-release but the GitHub Release is not/);
+});
+
+test("a plain version on a Release marked as pre-release is refused", () => {
+  assertRefused(run(manifest({}), "v1.2.3", "true"), /marked as a pre-release but version 1\.2\.3 has no/);
+});
+
+test("build metadata is not a pre-release suffix", () => {
+  const res = run(manifest({ version: "1.2.3+build-7" }), "v1.2.3+build-7", "false");
+  assert.equal(res.code, 0, res.out);
+});
+
+test("a missing or malformed pre-release flag is refused, not read as stable", () => {
+  assertRefused(run(manifest({}), "v1.2.3", null), /pre-release flag is "", not true or false/);
+  assertRefused(run(manifest({}), "v1.2.3", ""), /not true or false/);
+  assertRefused(run(manifest({}), "v1.2.3", "yes"), /not true or false/);
 });
