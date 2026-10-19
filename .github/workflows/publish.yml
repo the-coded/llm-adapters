@@ -45,11 +45,13 @@ jobs:
       - run: npm install -g npm@^11.5.1
       - run: node -e "const [a,b,c]=process.argv[1].split('.').map(Number); if (a<11||(a===11&&(b<5||(b===5&&c<1)))) { console.error('npm '+process.argv[1]+' is older than 11.5.1'); process.exit(1) }" "$(npm -v)"
 
-      # Before any build: a wrong tag or a package still marked private fails
-      # here, with the reason, instead of after the suite.
-      - run: node scripts/check-release.mjs "$RELEASE_TAG"
+      # Before any build: a wrong tag, a package still marked private, or a
+      # "pre-release" flag that disagrees with the version fails here, with the
+      # reason, instead of after the suite.
+      - run: node scripts/check-release.mjs "$RELEASE_TAG" "$PRERELEASE"
         env:
           RELEASE_TAG: ${{ github.event.release.tag_name }}
+          PRERELEASE: ${{ github.event.release.prerelease }}
 
       - run: npm ci
       - run: npm run typecheck
@@ -60,5 +62,9 @@ jobs:
 
       # `--provenance` is what Trusted Publishing does by default; spelled out so
       # a publish that cannot attach it (a private repository) fails instead of
-      # going out without it.
-      - run: npm publish --provenance
+      # going out without it. The dist-tag comes from the Release's
+      # "pre-release" flag, which check-release has already matched against the
+      # version: a pre-release goes to `next` and never becomes `latest`.
+      - run: npm publish --provenance --tag "$DIST_TAG"
+        env:
+          DIST_TAG: ${{ github.event.release.prerelease && 'next' || 'latest' }}
