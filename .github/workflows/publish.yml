@@ -5,7 +5,7 @@
 # OIDC token for a short-lived publish credential, so there is no long-lived
 # NPM_TOKEN to leak, and provenance is attached automatically. It only works
 # once the package exists on npm and this file is registered as its trusted
-# publisher -- see CONTRIBUTING.md.
+# publisher -- see RELEASING.md.
 
 name: Publish
 

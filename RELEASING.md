@@ -13,9 +13,10 @@ Before anything reaches the registry, the job:
 
 1. checks that the release tag is `v` plus the `package.json` version and that
    `package.json` is not marked `private` (`scripts/check-release.mjs`);
-2. runs the same gates as CI: `npm ci`, typecheck of the package and the
+2. runs the CI checks on Node 24: `npm ci`, typecheck of the package and the
    examples, build, the test suite and the tarball check
-   (`scripts/verify-pack.mjs`);
+   (`scripts/verify-pack.mjs`). Bun and Node 22 are covered by CI on the pull
+   request, not again at release time;
 3. runs `npm publish --provenance`.
 
 It authenticates with npm Trusted Publishing: there is no `NPM_TOKEN` secret.
@@ -55,11 +56,16 @@ racing each other to the registry.
 
 ## One-time setup
 
+`publishConfig.access` is `public` in `package.json` because a scoped package is
+restricted by default, and a first publish without it fails. Nothing in the
+repository blocks a publish: a plain `npm publish` from a clean, built checkout
+publishes for real.
+
 | Step | Where | Status |
 | --- | --- | --- |
 | `the-coded` organisation on npmjs.com, owning the `@the-coded` scope | npmjs.com | done |
 | First version published by hand (npm only allows a trusted publisher on a package that already exists) | local, logged in with 2FA | done: `0.1.0`, 2026-10-19 |
-| Trusted publisher: GitHub Actions, organisation `the-coded`, repository `llm-adapters`, workflow `publish.yml`, environment `npm` | npmjs.com → package → Settings | **to do** |
+| Trusted publisher: GitHub Actions, organisation `the-coded`, repository `llm-adapters`, workflow `publish.yml`, environment `npm`, with direct `npm publish` allowed | npmjs.com → package → Settings | **to do** |
 | GitHub environment named `npm` | GitHub → repository → Settings → Environments | **to do** |
 | Tag `v0.1.0` on the commit that was published (`5d7edf8`) | GitHub | **to do**: a tag only, no Release (see below) |
 
@@ -78,9 +84,10 @@ v0.1.0`. Publishing a Release for it would run the workflow, which would fail at
 | Symptom | Cause | Fix |
 | --- | --- | --- |
 | `check-release: release tag ... does not match` | The tag and `package.json` disagree | Delete the Release and its tag, bump or retag, publish again |
+| `check-release: package.json sets "private"` | Someone added `"private"` back | Remove the field in a commit, then release again |
 | `ENEEDAUTH` at `npm publish` | Trusted publisher missing or mistyped | Fix the entry on npmjs.com (names are exact), re-run the job |
 | `EPUBLISHCONFLICT` / "cannot publish over" | That version already exists on npm | Bump to the next version; versions are never reused |
-| A broken version is already out | — | Publish a fix as the next patch, and mark the bad one with `npm deprecate @the-coded/llm-adapters@x.y.z "<reason>"`. Unpublishing is only allowed within 72 hours and breaks anyone who installed it; prefer deprecating. |
+| A broken version is already out | — | Publish a fix as the next patch, and mark the bad one with `npm deprecate @the-coded/llm-adapters@x.y.z "<reason>"`. Unpublishing is restricted (generally within 72 hours, and after that only under narrow conditions) and breaks anyone who installed it; prefer deprecating. |
 
 ## Publishing by hand
 
