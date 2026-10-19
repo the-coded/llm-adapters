@@ -54,6 +54,27 @@ racing each other to the registry.
    version on npm: `npm view @the-coded/llm-adapters version`. The registry can
    take a few minutes to show a new version.
 
+## Pre-releases (alpha, beta, rc)
+
+A pre-release never becomes `latest`: whoever runs `npm install
+@the-coded/llm-adapters` keeps getting the last stable version.
+
+1. Version it with a pre-release suffix: `x.y.z-alpha.N`, `x.y.z-beta.N` or
+   `x.y.z-rc.N` (for example `0.2.0-beta.1`), bumped and changelogged like any
+   other version.
+2. Publish the GitHub Release with the tag `vx.y.z-beta.N` and the
+   **"Set as a pre-release"** box checked.
+3. The workflow publishes it under the `next` dist-tag. Install it with
+   `npm install @the-coded/llm-adapters@next`.
+4. When it is good, release the final `x.y.z` the normal way; it becomes
+   `latest`.
+
+The release is refused before anything is built when the two signals disagree:
+a version with a pre-release suffix on a Release not marked as pre-release, or
+a Release marked as pre-release on a plain `x.y.z` version. npm 11 itself
+refuses to publish a pre-release version without an explicit `--tag`, so this
+is the workflow choosing `next` on purpose rather than npm defaulting.
+
 ## One-time setup
 
 `publishConfig.access` is `public` in `package.json` because a scoped package is
