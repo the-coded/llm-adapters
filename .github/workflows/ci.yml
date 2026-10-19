@@ -20,14 +20,14 @@ jobs:
     name: bun
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
       # `npm ci` rather than `bun install`, deliberately: one lockfile decides
       # the toolchain version on every runtime, so a Bun-only resolution can
       # never be the reason this job disagrees with the Node ones.
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 24
       - run: npm ci
@@ -53,8 +53,8 @@ jobs:
         # 2026-04-30 and is deliberately not here.
         node: [22, 24]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: ${{ matrix.node }}
       - run: npm ci
