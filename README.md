@@ -440,6 +440,7 @@ of in-flight calls and the shared `opencode serve`. Each process group gets
 `SIGTERM`, and after `graceMs` every one of those groups gets `SIGKILL`.
 `graceMs` defaults to 3000, and a value that is not a finite number of zero or
 more means the default. Concurrent calls share one run, and it never rejects.
+It keeps the process alive until it settles, at most `graceMs` plus 1 s.
 
 The package installs no signal handler. Its CLIs run in their own process
 group, so Ctrl-C does not reach them: a host that traps `SIGINT` or `SIGTERM`

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { spawn, spawnSync } from "node:child_process";
 import { shutdown, spawnGroup } from "./process-group.js";
 import { OpenCodeAdapter } from "./adapters/opencode.js";
 import { ClaudeCodeAdapter } from "./adapters/claude-code.js";
@@ -188,3 +189,76 @@ test("a claude-code call stopped by shutdown names the signal, on both channels"
   await shutdown();
   assert.match(await completing, /^claude CLI failed \(signal SIGTERM\)/);
 });
+
+/** A host whose only remaining handle is the package's own: it has closed its
+ *  server, and the process it owns is unref'd (as opencode's server is). The
+ *  code after `await shutdown()` must still run, with the host's own exit code,
+ *  and a child ignoring SIGTERM must still get the SIGKILL -- an unref'd grace
+ *  timer let the host exit before `shutdown()` settled. */
+for (const [label, script, signal] of [
+  ["obeys SIGTERM", `echo 1 > "$READY"; exec sleep 300`, "SIGTERM"],
+  ["ignores SIGTERM", `trap "" TERM; echo 1 > "$READY"; exec sleep 300`, "SIGKILL"],
+] as const) {
+  test(`a host with no other handles runs the code after await shutdown() (child ${label})`, () => {
+    const dir = tmp();
+    const ready = join(dir, "ready");
+    const host = join(dir, "host.mjs");
+    writeFileSync(
+      host,
+      `import { existsSync } from "node:fs";
+import { shutdown, spawnGroup } from ${JSON.stringify(new URL("./process-group.js", import.meta.url).href)};
+const child = spawnGroup("sh", ["-c", ${JSON.stringify(script)}], { stdio: "ignore", env: { ...process.env, READY: ${JSON.stringify(ready)} } });
+child.unref();
+while (!existsSync(${JSON.stringify(ready)})) await new Promise((r) => setTimeout(r, 20));
+await shutdown({ graceMs: 300 });
+console.log("after-shutdown " + child.signalCode);
+process.exit(130);
+`,
+    );
+    const res = spawnSync(process.execPath, [host], { encoding: "utf8", timeout: 15_000 });
+    assert.equal(res.stdout.trim(), `after-shutdown ${signal}`, `marker missing; stderr: ${res.stderr}`);
+    assert.equal(res.status, 130);
+  });
+}
+
+/** The shape a real host has, and the one that also trips Bun: a SIGINT handler
+ *  that closes the host's own handle (a timer here: a real server's `close()`
+ *  happens to keep Bun alive), then awaits `shutdown()`, logs and exits 130. */
+for (const [label, script, signal] of [
+  ["obeys SIGTERM", `echo 1 > "$READY"; exec sleep 300`, "SIGTERM"],
+  ["ignores SIGTERM", `trap "" TERM; echo 1 > "$READY"; exec sleep 300`, "SIGKILL"],
+] as const) {
+  test(`a SIGINT handler that awaits shutdown() runs to its own exit code (child ${label})`, async () => {
+    const dir = tmp();
+    const ready = join(dir, "ready");
+    const host = join(dir, "handler.mjs");
+    writeFileSync(
+      host,
+      `import { existsSync } from "node:fs";
+import { shutdown, spawnGroup } from ${JSON.stringify(new URL("./process-group.js", import.meta.url).href)};
+const child = spawnGroup("sh", ["-c", ${JSON.stringify(script)}], { stdio: "ignore", env: { ...process.env, READY: ${JSON.stringify(ready)} } });
+child.unref();
+const own = setInterval(() => {}, 1000);
+process.on("SIGINT", async () => {
+  clearInterval(own);
+  await shutdown({ graceMs: 300 });
+  console.log("after-shutdown " + child.signalCode);
+  process.exit(130);
+});
+while (!existsSync(${JSON.stringify(ready)})) await new Promise((r) => setTimeout(r, 20));
+console.log("ready");
+`,
+    );
+    const proc = spawn(process.execPath, [host], { stdio: ["ignore", "pipe", "pipe"] });
+    let out = "";
+    let err = "";
+    proc.stdout.on("data", (d) => (out += d));
+    proc.stderr.on("data", (d) => (err += d));
+    const closed = new Promise<number | null>((r) => proc.once("close", (code) => r(code)));
+    await waitFor(() => out.includes("ready"));
+    proc.kill("SIGINT");
+    const code = await closed;
+    assert.equal(out.replace("ready", "").trim(), `after-shutdown ${signal}`, `marker missing; stderr: ${err}`);
+    assert.equal(code, 130);
+  });
+}

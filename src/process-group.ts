@@ -115,7 +115,15 @@ export function spawnGroup(command: string, args: readonly string[], options: Sp
 
 const alive = (p: ChildProcess) => p.exitCode === null && p.signalCode === null;
 
-/** Resolves on `exit`, or when `ms` runs out (timer unref'd). */
+/** Resolves on `exit`, or when `ms` runs out.
+ *
+ *  The timer is **not** unref'd. A host awaiting `shutdown()` has usually
+ *  closed its own handles already, and opencode's server is unref'd, so this
+ *  timer can be the only thing holding the event loop: unref'd, the process
+ *  exited before `shutdown()` settled, the code after the `await` never ran,
+ *  and a server ignoring SIGTERM never got its SIGKILL. It holds the loop only
+ *  while something is left to wait for: `done` clears it as soon as every
+ *  process has exited. */
 function waitExit(procs: ChildProcess[], ms: number): Promise<void> {
   const pending = procs.filter(alive);
   if (pending.length === 0) return Promise.resolve();
@@ -126,7 +134,6 @@ function waitExit(procs: ChildProcess[], ms: number): Promise<void> {
       resolve();
     };
     const timer = setTimeout(done, ms);
-    timer.unref();
     for (const p of pending) {
       p.once("exit", () => {
         if (--left === 0) done();
