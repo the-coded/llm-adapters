@@ -1,6 +1,6 @@
 {
   "name": "@the-coded/llm-adapters",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "One interface for every way an application talks to an LLM: API keys and local CLIs alike.",
   "license": "MIT",
   "author": "Gabriel Mule <gabriel@laplanta.com.br>",
