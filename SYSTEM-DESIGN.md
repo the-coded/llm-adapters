@@ -91,6 +91,13 @@ binary paths — but the consumer decides *which* binary path is trusted
 `signal` must be wired end-to-end by consumers so a disconnected client
 cannot leave orphan processes.
 
+The package installs no signal handler: shutdown is the host's policy. CLI
+children are process-group leaders, so Ctrl-C does not reach them; a host that
+traps SIGINT/SIGTERM calls `shutdown()`, which stops every process the package
+started (including the shared `opencode serve`) and escalates to SIGKILL after a
+grace period. The short-lived `execFile`/`execFileSync` probes are not
+registered; they are bounded by their own timeouts.
+
 ## 4. Model discovery
 
 ### The problem

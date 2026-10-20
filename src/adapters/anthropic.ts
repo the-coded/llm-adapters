@@ -9,6 +9,11 @@ const ANTHROPIC_MODELS_URL = "https://api.anthropic.com/v1/models";
 // caller sees a bad answer rather than an error and blames the prompt.
 const MAX_TOKENS = 32000;
 
+/** `maxTokens` as sent, or `undefined` when it is not a positive integer: an
+ *  optional option must not become a new way for a call to fail. */
+const validMaxTokens = (n: number | undefined): number | undefined =>
+  typeof n === "number" && Number.isSafeInteger(n) && n > 0 ? n : undefined;
+
 /** Refuses a streamed body where a single JSON object was asked for.
  *
  *  `complete()` sends `stream: false`, but a server is free to ignore it — and
@@ -65,7 +70,7 @@ export class AnthropicAdapter implements LLMAdapter {
         },
         body: JSON.stringify({
           model: this.model,
-          max_tokens: MAX_TOKENS,
+          max_tokens: validMaxTokens(options?.maxTokens) ?? MAX_TOKENS,
           stream: true,
           system: systemPrompt || undefined,
           messages,
@@ -77,7 +82,14 @@ export class AnthropicAdapter implements LLMAdapter {
     }
 
     if (!res.ok || !res.body) {
-      yield { type: "error", error: `request failed (${res.status})`, details: await res.text().then(redactText, () => undefined) };
+      yield {
+        type: "error",
+        error: `request failed (${res.status})`,
+        details: await res.text().then(redactText, () => undefined),
+        // Only for a non-ok answer: an ok response with no body is not an HTTP
+        // error, and a 200 here would read as one.
+        ...(res.ok ? {} : { status: res.status }),
+      };
       return;
     }
 
@@ -163,7 +175,7 @@ export class AnthropicAdapter implements LLMAdapter {
   async complete(
     systemPrompt: string,
     messages: LLMMessage[],
-    options?: { model?: string; signal?: AbortSignal; onUsage?: (usage: LLMUsage) => void }
+    options?: { model?: string; signal?: AbortSignal; maxTokens?: number; onUsage?: (usage: LLMUsage) => void }
   ): Promise<string> {
     const res = await fetch(ANTHROPIC_API_URL, {
       method: "POST",
@@ -174,7 +186,7 @@ export class AnthropicAdapter implements LLMAdapter {
       },
       body: JSON.stringify({
         model: options?.model ?? this.model,
-        max_tokens: MAX_TOKENS,
+        max_tokens: validMaxTokens(options?.maxTokens) ?? MAX_TOKENS,
         // Explicit, not omitted. Left out, the response shape depends on the
         // server's default, and a gateway that streams by default returns SSE
         // to a call that is about to `.json()` it.

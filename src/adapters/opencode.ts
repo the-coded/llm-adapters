@@ -29,13 +29,13 @@
 // silent — an answer shaped by someone's personal rules looks exactly like an
 // answer.
 
-import { execFile, spawn, type ChildProcess } from "node:child_process";
+import { execFile, type ChildProcess } from "node:child_process";
 import os from "node:os";
 import { promisify } from "node:util";
 
 import type { LLMAdapter, LLMMessage, LLMStreamChunk, LLMUsage, StreamOptions } from "../types.js";
 import { errorText, redactText, redactValue } from "../redact.js";
-import { groupSpawnOptions, killProcessTree } from "../process-group.js";
+import { killProcessTree, spawnGroup } from "../process-group.js";
 
 const run = promisify(execFile);
 
@@ -102,7 +102,7 @@ async function ensureServer(binary: string): Promise<string> {
   // clear message rather than as silent cross-talk.
   const port = 47_300 + (process.pid % 200);
   const base = `http://127.0.0.1:${port}`;
-  const proc = spawn(binary, ["serve", "--port", String(port)], {
+  const proc = spawnGroup(binary, ["serve", "--port", String(port)], {
     env: serverEnv(),
     stdio: ["ignore", "ignore", "pipe"],
     // Outside the repository on purpose: opencode reads project-level config
@@ -113,7 +113,6 @@ async function ensureServer(binary: string): Promise<string> {
     // A group leader: `opencode serve` starts a server, so an orphan does not
     // merely linger -- it holds the port, and the next run finds a server that
     // is not its own.
-    ...groupSpawnOptions,
   });
 
   let stderr = "";
@@ -141,8 +140,10 @@ async function ensureServer(binary: string): Promise<string> {
         shared = null;
         throw new Error(`could not run "${binary}": ${spawnFailure.error.message}`);
       }
-      if (proc.exitCode !== null) {
-        throw new Error(`opencode serve exited with ${proc.exitCode}: ${stderr.trim()}`);
+      // A signal death leaves `exitCode` null and sets `signalCode`; checking
+      // only the code kept polling a dead server until the boot timeout.
+      if (proc.exitCode !== null || proc.signalCode !== null) {
+        throw new Error(`opencode serve exited with ${proc.exitCode ?? proc.signalCode}: ${stderr.trim()}`);
       }
       try {
         const res = await fetch(`${base}/global/health`);

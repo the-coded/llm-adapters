@@ -22,6 +22,11 @@ export { extractUsage, readCliOutput } from "./adapters/claude-code.js";
 // file calls `loadConfig()` and passes the result in.
 export { CONFIG_PATH, loadConfig, readStoredConfig, saveConfig } from "./config.js";
 
+// Stops every process the package started (CLIs of in-flight calls, the shared
+// `opencode serve`). The package installs no signal handler: a host that traps
+// SIGINT/SIGTERM calls this.
+export { shutdown } from "./process-group.js";
+
 // For an application that obtains a key by some path of its own -- a settings
 // screen, a secrets manager -- and wants it scrubbed from anything this package
 // returns. `getLLMAdapter` registers the key it is given, so this is only

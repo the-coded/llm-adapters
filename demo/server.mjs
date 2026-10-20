@@ -24,6 +24,7 @@ import {
   PROVIDERS,
   PROVIDER_LIST,
   CONFIG_PATH,
+  shutdown,
 } from "@the-coded/llm-adapters";
 
 const PORT = Number(process.env.PORT ?? 4173);
@@ -189,9 +190,9 @@ function installShutdown(server) {
       // Aborting propagates into the adapters, which kill their process groups.
       for (const aborter of running) aborter.abort();
       server.close();
-      // A grace window so those kills land; exiting immediately would race them
-      // and leave behind exactly what the abort exists to remove.
-      setTimeout(() => process.exit(0), 3_000).unref();
+      // Stops every process the package still owns (CLIs and the shared
+      // `opencode serve`); exiting before it settles would race the kills.
+      shutdown({ graceMs: 3_000 }).then(() => process.exit(0));
     });
   }
 }

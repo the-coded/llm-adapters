@@ -1,6 +1,11 @@
 import type { LLMAdapter, LLMMessage, LLMStreamChunk, LLMUsage, StreamOptions } from "../types.js";
 import { errorText, redactText, registerSecret } from "../redact.js";
 
+/** `maxTokens` as sent, or `undefined` when it is not a positive integer: an
+ *  optional option must not become a new way for a call to fail. */
+const validMaxTokens = (n: number | undefined): number | undefined =>
+  typeof n === "number" && Number.isSafeInteger(n) && n > 0 ? n : undefined;
+
 /** Refuses a streamed body where a single JSON object was asked for.
  *
  *  `complete()` sends `stream: false`, but a server is free to ignore it -- and
@@ -59,6 +64,9 @@ export class OpenAICompatibleAdapter implements LLMAdapter {
         body: JSON.stringify({
           model: this.model,
           stream: true,
+          // Only when set: sending nothing is the default, and `max_tokens`
+          // rather than `max_completion_tokens` because gateways accept it.
+          max_tokens: validMaxTokens(options?.maxTokens),
           // Without this the OpenAI protocol sends **no** usage in a stream at
           // all, so reading it opportunistically would be a feature that never
           // fires. Declared risk: a gateway that rejects unknown body fields
@@ -78,7 +86,14 @@ export class OpenAICompatibleAdapter implements LLMAdapter {
     }
 
     if (!res.ok || !res.body) {
-      yield { type: "error", error: `request failed (${res.status})`, details: await res.text().then(redactText, () => undefined) };
+      yield {
+        type: "error",
+        error: `request failed (${res.status})`,
+        details: await res.text().then(redactText, () => undefined),
+        // Only for a non-ok answer: an ok response with no body is not an HTTP
+        // error, and a 200 here would read as one.
+        ...(res.ok ? {} : { status: res.status }),
+      };
       return;
     }
 
@@ -139,7 +154,7 @@ export class OpenAICompatibleAdapter implements LLMAdapter {
   async complete(
     systemPrompt: string,
     messages: LLMMessage[],
-    options?: { model?: string; signal?: AbortSignal; onUsage?: (usage: LLMUsage) => void }
+    options?: { model?: string; signal?: AbortSignal; maxTokens?: number; onUsage?: (usage: LLMUsage) => void }
   ): Promise<string> {
     const res = await fetch(`${this.baseUrl.replace(/\/$/, "")}/chat/completions`, {
       method: "POST",
@@ -149,6 +164,7 @@ export class OpenAICompatibleAdapter implements LLMAdapter {
       },
       body: JSON.stringify({
         model: options?.model ?? this.model,
+        max_tokens: validMaxTokens(options?.maxTokens),
         // Explicit, not omitted. Left out, the response shape depends on the
         // server's default -- and a local gateway that streams by default
         // returned SSE to this very call, which then died inside undici with a

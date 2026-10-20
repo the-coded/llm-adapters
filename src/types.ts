@@ -26,6 +26,10 @@ export interface LLMStreamChunk {
   error?: string;
   /** Detailed error output (e.g. full stderr) for debugging */
   details?: string;
+  /** HTTP status the provider answered with, when the error came from an HTTP
+   *  response. Absent for network failures, aborts, and CLI errors —
+   *  absent means "no HTTP status", never 0. */
+  status?: number;
 }
 
 /**
@@ -61,6 +65,10 @@ export interface StreamOptions {
   textOnly?: boolean;
   /** Max agentic turns (claude-code only) */
   maxTurns?: number;
+  /** Upper bound on output tokens for this call. API adapters send it; the CLI
+   *  adapters have no such flag and ignore it, as they ignore other options
+   *  they do not use. A value that is not a positive integer is not sent. */
+  maxTokens?: number;
   /** Abort signal — a caller wires its request's signal here so a client
    * disconnect kills the spawned CLI / in-flight fetch instead of leaking it. */
   signal?: AbortSignal;
@@ -158,7 +166,7 @@ export interface LLMAdapter {
   complete(
     systemPrompt: string,
     messages: LLMMessage[],
-    options?: { model?: string; signal?: AbortSignal; onUsage?: (usage: LLMUsage) => void }
+    options?: { model?: string; signal?: AbortSignal; maxTokens?: number; onUsage?: (usage: LLMUsage) => void }
   ): Promise<string>;
 
   /** The models this provider can actually reach, asked of the provider
