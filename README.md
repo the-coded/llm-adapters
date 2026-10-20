@@ -187,6 +187,7 @@ what leaves the file layout free to change.
 | [`registerSecret`](#registersecret) | function | Scrub a value from what this package returns |
 | [`extractUsage`](#extractusage) | function | Consumption out of a parsed CLI result event |
 | [`readCliOutput`](#readclioutput) | function | Text and consumption out of CLI stdout |
+| [`shutdown`](#shutdown) | function | Stop every process the package started |
 
 ### getLLMAdapter
 
@@ -214,7 +215,7 @@ interface LLMAdapter {
   complete(
     systemPrompt: string,
     messages: LLMMessage[],
-    options?: { model?: string; signal?: AbortSignal; onUsage?: (usage: LLMUsage) => void }
+    options?: { model?: string; signal?: AbortSignal; maxTokens?: number; onUsage?: (usage: LLMUsage) => void }
   ): Promise<string>;
 
   // Optional, so a caller feature-detects rather than catching. Absent on
@@ -255,8 +256,13 @@ interface LLMStreamChunk {
   text?: string;
   error?: string;
   details?: string;         // redacted before it reaches you: see Security
+  status?: number;          // the provider's HTTP status, on an HTTP error only
 }
 ```
+
+`status` is set only when the error is the provider's own HTTP answer (a `429`,
+say). It is absent — never `0` — for a network failure, an abort or a CLI
+error, and the `error` text is the same either way.
 
 A failing `stream()` yields `{ type: "error" }` rather than throwing, which
 changes how you catch it — see [Errors](#errors).
@@ -271,8 +277,14 @@ interface StreamOptions {
   allowedTools?: string[];                 // claude-code only
   textOnly?: boolean;                      // claude-code only
   maxTurns?: number;                       // claude-code only
+  maxTokens?: number;                      // anthropic, openai-compatible
 }
 ```
+
+`maxTokens` caps the output tokens of one call. `anthropic` sends it in place of
+its default of 32000; `openai-compatible` sends `max_tokens` only when it is set.
+The CLI adapters have no such flag and ignore it. A value that is not a positive
+integer is not sent.
 
 An adapter ignores the fields it has no use for. That is what lets one interface
 cover subprocess providers and HTTP providers without either contaminating the
@@ -416,6 +428,39 @@ function readCliOutput(stdout: string, onUsage?: (usage: LLMUsage) => void): str
 Text out of that same CLI output, firing `onUsage` once if the output carried
 consumption. Both of these are pure functions over text, so they work on output
 you captured yourself, without an adapter and without spawning anything.
+
+### shutdown
+
+```ts
+function shutdown(options?: { graceMs?: number }): Promise<void>;
+```
+
+Stops every process this package started and that is still running: the CLIs
+of in-flight calls and the shared `opencode serve`. Each process group gets
+`SIGTERM`, and after `graceMs` every one of those groups gets `SIGKILL`.
+`graceMs` defaults to 3000, and a value that is not a finite number of zero or
+more means the default. Concurrent calls share one run, and it never rejects.
+
+The package installs no signal handler. Its CLIs run in their own process
+group, so Ctrl-C does not reach them: a host that traps `SIGINT` or `SIGTERM`
+calls this before it exits.
+
+```ts
+import { shutdown } from "@the-coded/llm-adapters";
+
+process.once("SIGINT", async () => {
+  await shutdown();
+  process.exit(130);
+});
+```
+
+Calls in progress fail: an in-flight `stream()` ends with an error chunk, and an
+in-flight `complete()` rejects. On Windows only the direct child is signalled —
+see [Runtimes](#runtimes).
+
+A process spawned while a shutdown is already running is not covered by that
+call; call `shutdown()` again. And a group whose leader had already exited
+before the call cannot be reached, because the package no longer tracks it.
 
 ## Usage and cost
 
@@ -588,7 +633,7 @@ issue.
 | TypeScript | 5.x. Declarations are shipped; `moduleResolution` must resolve `exports`. |
 | Deno | Untested. |
 | Browsers, Workers, Edge runtimes | The two HTTP adapters use only `fetch` and should work. **The two CLI adapters cannot**: they spawn a child process, which those runtimes do not have. |
-| Windows | Untested, and one known limit: aborting a CLI adapter signals the direct child rather than its process group there, so a CLI that spawns children can leave them running. |
+| Windows | Untested, and one known limit: aborting a CLI adapter, or calling `shutdown()`, signals the direct child rather than its process group there, so a CLI that spawns children can leave them running. |
 
 The CLI-spawn family is the interesting line in that table: it is what this
 package has that an SDK does not, and it is also the reason the package is not

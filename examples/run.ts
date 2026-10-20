@@ -20,7 +20,7 @@
  * distinction is the one the whole package exists to protect, and a demo that
  * erased it would contradict the library it demonstrates.
  */
-import { getLLMAdapter, loadConfig, PROVIDERS } from "@the-coded/llm-adapters";
+import { getLLMAdapter, loadConfig, PROVIDERS, shutdown as stopProcesses } from "@the-coded/llm-adapters";
 import type { LLMConfig, LLMUsage } from "@the-coded/llm-adapters";
 
 /** Exit codes, because a harness that always exits 0 lies to whatever runs it.
@@ -182,9 +182,9 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
     interrupted = true;
     console.log(`\n${signal} — cancelling the call and waiting for the process to go…`);
     shutdown.abort();
-    // The abort propagates into the adapter, which kills the process group.
-    // Exiting immediately here would race that and leave the orphan behind.
-    setTimeout(() => process.exit(EXIT.failed), 5_000).unref();
+    // The abort propagates into the adapter, which kills the process group;
+    // `stopProcesses()` then stops whatever the package still owns.
+    void stopProcesses({ graceMs: 3_000 }).then(() => process.exit(EXIT.failed));
   });
 }
 

@@ -279,3 +279,50 @@ test("a stream carrying no usage reports nothing", async () => {
     stub.restore();
   }
 });
+
+/** `maxTokens` reaches the body on both paths; unset keeps the 32000 default,
+ *  and a value that is not a positive integer is not sent. The reply is a 500,
+ *  so the request is all this looks at. */
+test("maxTokens is sent on stream and complete, and an invalid value falls back to the default", async () => {
+  const stub = stubFetch(() => new Response("{}", { status: 500 }));
+  const sent = () => JSON.parse(String(stub.calls.at(-1)!.init!.body)).max_tokens;
+  try {
+    const adapter = new AnthropicAdapter("key-for-tests-123", "m");
+    const messages = [{ role: "user" as const, content: "hi" }];
+    await drain(adapter.stream("", messages, { maxTokens: 256 }));
+    assert.equal(sent(), 256);
+    await adapter.complete("", messages, { maxTokens: 512 }).catch(() => {});
+    assert.equal(sent(), 512);
+    await drain(adapter.stream("", messages));
+    assert.equal(sent(), 32000);
+    for (const bad of [0, -1, 1.5, NaN, Infinity, 1e21]) {
+      await drain(adapter.stream("", messages, { maxTokens: bad }));
+      assert.equal(sent(), 32000, `maxTokens ${bad} was sent`);
+      await adapter.complete("", messages, { maxTokens: bad }).catch(() => {});
+      assert.equal(sent(), 32000, `maxTokens ${bad} was sent by complete()`);
+    }
+  } finally {
+    stub.restore();
+  }
+});
+
+test("an HTTP error chunk carries the status, with the old error text unchanged", async () => {
+  const stub = stubFetch(() => new Response("slow down", { status: 429 }));
+  try {
+    const chunks = await drain(new AnthropicAdapter("key-for-tests-123", "m").stream("", [{ role: "user", content: "hi" }]));
+    assert.deepEqual(chunks.map((c) => [c.type, c.error, c.status]), [["error", "request failed (429)", 429]]);
+  } finally {
+    stub.restore();
+  }
+});
+
+test("a network failure gives an error chunk with no status key", async () => {
+  const stub = stubFetch(() => Promise.reject(new TypeError("fetch failed")));
+  try {
+    const [chunk] = await drain(new AnthropicAdapter("key-for-tests-123", "m").stream("", [{ role: "user", content: "hi" }]));
+    assert.equal(chunk!.type, "error");
+    assert.ok(!("status" in chunk!), `status present: ${JSON.stringify(chunk)}`);
+  } finally {
+    stub.restore();
+  }
+});

@@ -1,9 +1,9 @@
-import { spawn, execFileSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { accessSync, constants, readdirSync } from "node:fs";
 import path from "node:path";
 import type { LLMAdapter, LLMMessage, LLMStreamChunk, LLMUsage, StreamOptions } from "../types.js";
 import { errorText, redactText } from "../redact.js";
-import { groupSpawnOptions, killProcessTree } from "../process-group.js";
+import { killProcessTree, spawnGroup } from "../process-group.js";
 
 /** Absolute places the `claude` binary is worth looking for, before falling back
  *  to `which`.
@@ -262,13 +262,12 @@ export class ClaudeCodeAdapter implements LLMAdapter {
         args.push("--max-turns", String(options.maxTurns));
       }
 
-      const proc = spawn(claudeBin, args, {
+      const proc = spawnGroup(claudeBin, args, {
         stdio: ["pipe", "pipe", "pipe"],
         env: this.spawnEnv(),
         cwd: options?.cwd,
         // A group leader, so aborting reaches the CLI's own children. Without
         // it a grandchild keeps the inherited stdout open and this never ends.
-        ...groupSpawnOptions,
       });
 
       // A failed spawn (binary missing, EACCES) makes the stdin write throw
@@ -409,13 +408,14 @@ export class ClaudeCodeAdapter implements LLMAdapter {
         enqueue(null);
       });
 
-      proc.on("close", (code) => {
+      proc.on("close", (code, signal) => {
         if (buffer.trim()) {
           processJsonLine(buffer.trim());
           buffer = "";
         }
         if (code !== 0 && !finalError) {
-          finalError = `claude CLI exited with code ${code}`;
+          // A signal death has no code (it is null), so the signal is named.
+          finalError = signal ? `claude CLI exited by signal ${signal}` : `claude CLI exited with code ${code}`;
         }
         closed = true;
         enqueue(null);
@@ -473,10 +473,9 @@ export class ClaudeCodeAdapter implements LLMAdapter {
       const claudeBin = this.findClaudeBin();
       const args = ["--print", "--output-format", "json", "--model", options?.model ?? this.model];
 
-      const proc = spawn(claudeBin, args, {
+      const proc = spawnGroup(claudeBin, args, {
         stdio: ["pipe", "pipe", "pipe"],
         env: this.spawnEnv(),
-        ...groupSpawnOptions,
       });
 
       // Client disconnected, or the caller's own timeout fired: kill the CLI
@@ -512,14 +511,15 @@ export class ClaudeCodeAdapter implements LLMAdapter {
         stderr += data.toString();
       });
 
-      proc.on("close", (code) => {
+      proc.on("close", (code, signal) => {
         options?.signal?.removeEventListener("abort", onAbort);
         if (aborted) {
           reject(new Error("claude CLI aborted (client disconnect or timeout)"));
           return;
         }
         if (code !== 0) {
-          reject(new Error(redactText(`claude CLI failed (code ${code}): ${stderr.trim()}`)));
+          const how = signal ? `signal ${signal}` : `code ${code}`;
+          reject(new Error(redactText(`claude CLI failed (${how}): ${stderr.trim()}`)));
           return;
         }
         resolve(readCliOutput(stdout, options?.onUsage));

@@ -251,3 +251,48 @@ test("a stream carrying no usage reports nothing", async () => {
     stub.restore();
   }
 });
+
+/** `max_tokens` only when set, on both paths; nothing by default, and nothing
+ *  for a value that is not a positive integer. The reply is a 500, so the
+ *  request is all this looks at. */
+test("maxTokens is sent only when set and valid, on stream and complete", async () => {
+  const stub = stubFetch(() => new Response("{}", { status: 500 }));
+  const body = () => JSON.parse(String(stub.calls.at(-1)!.init!.body)) as Record<string, unknown>;
+  try {
+    const adapter = new OpenAICompatibleAdapter("http://gateway.test/v1", "key-for-tests-123", "m");
+    const messages = [{ role: "user" as const, content: "hi" }];
+    await drain(adapter.stream("", messages, { maxTokens: 256 }));
+    assert.equal(body().max_tokens, 256);
+    await adapter.complete("", messages, { maxTokens: 512 }).catch(() => {});
+    assert.equal(body().max_tokens, 512);
+    for (const unset of [undefined, 0, -1, 1.5, NaN, Infinity, 1e21]) {
+      await drain(adapter.stream("", messages, { maxTokens: unset }));
+      assert.ok(!("max_tokens" in body()), `stream sent max_tokens for ${unset}`);
+      await adapter.complete("", messages, { maxTokens: unset }).catch(() => {});
+      assert.ok(!("max_tokens" in body()), `complete sent max_tokens for ${unset}`);
+    }
+  } finally {
+    stub.restore();
+  }
+});
+
+test("an HTTP error chunk carries the status, with the old error text unchanged", async () => {
+  const stub = stubFetch(() => new Response("slow down", { status: 429 }));
+  try {
+    const chunks = await drain(new OpenAICompatibleAdapter("http://gateway.test/v1", "key-for-tests-123", "m").stream("", [{ role: "user", content: "hi" }]));
+    assert.deepEqual(chunks.map((c) => [c.type, c.error, c.status]), [["error", "request failed (429)", 429]]);
+  } finally {
+    stub.restore();
+  }
+});
+
+test("a network failure gives an error chunk with no status key", async () => {
+  const stub = stubFetch(() => Promise.reject(new TypeError("fetch failed")));
+  try {
+    const [chunk] = await drain(new OpenAICompatibleAdapter("http://gateway.test/v1", "key-for-tests-123", "m").stream("", [{ role: "user", content: "hi" }]));
+    assert.equal(chunk!.type, "error");
+    assert.ok(!("status" in chunk!), `status present: ${JSON.stringify(chunk)}`);
+  } finally {
+    stub.restore();
+  }
+});
