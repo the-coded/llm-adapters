@@ -3,6 +3,15 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1]
+
+### Fixed
+
+- In 0.2.0, a host that awaited `shutdown()` after closing its own handles
+  could exit before the call settled: the code after `await shutdown()` never ran, the
+  host's own exit code was lost, and a process ignoring SIGTERM never got the
+  SIGKILL. `shutdown()` now keeps the process alive until it has finished.
+
 ## [0.2.0]
 
 ### Added
